@@ -104,6 +104,13 @@ function initThree(canvasWrap) {
           const box2 = new THREE.Box3().setFromObject(obj);
           obj.position.y = -box2.min.y;
 
+          // ✅ 再把整體模型抬高到格網面以上（可調整）
+          // 用模型尺寸做比例，比固定數值更穩定
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const LIFT_RATIO = 0.02; // 抬高 2% 尺寸（想更高就改 0.03 / 0.05）
+          const LIFT_EXTRA = maxDim * LIFT_RATIO;
+          obj.position.y += LIFT_EXTRA;
+
           // 讓貼圖以 sRGB 顯示（不然會偏灰/偏暗）
           obj.traverse((child) => {
             if (!child.isMesh) return;
@@ -119,7 +126,6 @@ function initThree(canvasWrap) {
           scene.add(obj);
 
           // 相機自動抓距離（依模型尺寸）
-          const maxDim = Math.max(size.x, size.y, size.z);
           const dist = maxDim * 1.6;
 
           controls.target.set(0, maxDim * 0.35, 0);
