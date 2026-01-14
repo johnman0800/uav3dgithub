@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>橋梁 3D 量測與資料表</title>
+  <link rel="stylesheet" href="./style.css" />
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <div id="viewer">
+      <div id="viewerToolbar">
+        <button id="btnMeasure">線段量測</button>
+        <button id="btnClear">清除量測</button>
+
+        <div class="spacer"></div>
+
+        <button id="btnHome">回到對焦點</button>
+        <button id="btnZoomIn">＋</button>
+        <button id="btnZoomOut">－</button>
+      </div>
+
+      <div id="canvasWrap"></div>
+
+      <div id="statusBar">
+        <span id="statusText">載入中...</span>
+        <span id="measureText" style="color:#ffeb3b;font-weight:bold;font-size:1.2em;">量測值：—</span>
+      </div>
+    </div>
+
+    <div id="panel">
+      <h2>構造物資料填寫</h2>
+
+      <div class="group instruction-box">
+        <label><b>🖱️ 視角操作說明</b></label>
+        <div class="hint">
+          • <b>放大/縮小：</b>滾輪<br/>
+          • <b>旋轉視角：</b>滑鼠左鍵<br/>
+          • <b>平移視角：</b>SHIFT + 左鍵
+        </div>
+      </div>
+
+      <div class="group">
+        <label>橋名</label>
+        <input id="bridgeName" type="text" placeholder="請輸入橋名" />
+        <label>道路編號</label>
+        <input id="roadId" type="text" placeholder="請輸入編號" />
+      </div>
+
+      <div class="group">
+        <label>類型</label>
+        <select id="structureType">
+          <option value="箱涵">箱涵</option>
+          <option value="管涵">管涵</option>
+          <option value="版橋">版橋</option>
+          <option value="其他">其他</option>
+        </select>
+
+        <label>淤積程度</label>
+        <select id="sedimentation">
+          <option value="無">無</option>
+          <option value="輕微">輕微</option>
+          <option value="嚴重">嚴重</option>
+        </select>
+      </div>
+
+      <div class="group">
+        <div class="row2">
+          <div>
+            <label>淨高 (m)</label>
+            <input id="clearance" type="number" step="0.01" value="0" />
+          </div>
+          <div>
+            <label>寬度 (m)</label>
+            <input id="width" type="number" step="0.01" value="0" />
+          </div>
+        </div>
+        <label>長度（路寬）(m)</label>
+        <input id="lengthRoadWidth" type="number" step="0.01" value="0" />
+      </div>
+
+      <div class="group">
+        <button class="primary" id="btnExportCsv">匯出 CSV 檔案</button>
+        <button class="primary" id="btnExportWord">匯出 Word 報告</button>
+      </div>
+
+      <div class="hint">
+        <b>量測說明：</b><br/>
+        點擊「線段量測」後，在模型上點兩下完成量測，隨後將下方顯示的數據手動填入上方欄位即可。
+      </div>
+    </div>
+  </div>
+
+  <!-- 現在 app.js 已在同一層，所以直接 ./app.js -->
+  <script type="module" src="./app.js?v=5"></script>
+</body>
+</html>

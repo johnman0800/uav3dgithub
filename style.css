@@ -1,0 +1,52 @@
+html, body { height: 100%; margin: 0; font-family: Arial, "Microsoft JhengHei", sans-serif; }
+#app { height: 100%; display: flex; background: #111; color: #eee; }
+
+#viewer { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#canvasWrap { flex: 1; position: relative; }
+
+#viewerToolbar {
+  display: flex; gap: 8px; align-items: center;
+  padding: 10px; background: #1b1b1b; border-bottom: 1px solid #333;
+}
+#viewerToolbar button {
+  background: #2a2a2a; color: #eee; border: 1px solid #444;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer;
+}
+#viewerToolbar button.active { outline: 2px solid #4aa3ff; }
+.spacer { flex: 1; }
+
+#statusBar {
+  display: flex; justify-content: space-between;
+  padding: 8px 10px; background: #1b1b1b; border-top: 1px solid #333;
+  font-size: 13px; color: #bbb;
+}
+
+#panel {
+  width: 360px; max-width: 40vw;
+  background: #f3f3f3; color: #111;
+  padding: 14px 14px 18px; box-sizing: border-box;
+  border-left: 1px solid #333;
+  overflow: auto;
+}
+#panel h2 { margin: 0 0 12px; font-size: 18px; }
+.group { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+label { display: block; font-size: 13px; margin: 8px 0 6px; color: #333; }
+input, select {
+  width: 100%; box-sizing: border-box;
+  padding: 8px 10px; border-radius: 10px;
+  border: 1px solid #ccc; font-size: 14px;
+}
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.applyRow { display: flex; gap: 10px; margin-top: 10px; }
+.applyRow select { flex: 1; }
+.applyRow button { flex: 1; }
+
+button.primary {
+  width: 100%;
+  background: #2b6cff; color: #fff; border: 0;
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  font-size: 14px;
+}
+button.primary + button.primary { margin-top: 10px; }
+
+.hint { font-size: 12px; color: #444; line-height: 1.5; }
