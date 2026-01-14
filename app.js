@@ -85,11 +85,8 @@ function initThree(canvasWrap) {
       objLoader.load(
         MODEL_OBJ,
         (obj) => {
-          // 模型座標系：不同來源的 OBJ 可能會有軸向差異。
-          // 如果你看到模型「站起來/躺倒 90 度」，調整下面這個角度即可：
-          // 0 代表不旋轉；-Math.PI/2 或 Math.PI/2 代表繞 X 軸旋轉 90 度。
-          const ROTATE_X = 0;
-          obj.rotation.x = ROTATE_X;
+          // ✅ 修正：模型目前「站起來」= 需要繞 X 軸轉 -90 度讓它躺平
+          obj.rotation.set(-Math.PI / 2, 0, 0);
 
           // 計算 bounding box：置中 + 放到地面上
           const box = new THREE.Box3().setFromObject(obj);
@@ -136,10 +133,7 @@ function initThree(canvasWrap) {
           const statusEl = document.getElementById("statusText");
           if (statusEl) statusEl.textContent = "模型載入完成";
         },
-        (xhr) => {
-          // loading progress
-          // console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
-        },
+        undefined,
         (err) => {
           console.error("OBJ 載入失敗：", err);
           const statusEl = document.getElementById("statusText");
