@@ -1,176 +1,246 @@
+// ===============================
+// Three.js (ES Module via Import Map)
+// ===============================
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
-// ===== 你要的模型檔名（都在同一層）=====
-const MODEL_MTL = "./MipModel-v2.mtl";
-const MODEL_OBJ = "./MipModel-v2.obj";
+// =====================================================
+// 入口：等 DOM 都準備好再開始（避免 GitHub Pages 上抓不到元素）
+// =====================================================
+window.addEventListener("DOMContentLoaded", () => {
+  // ===============================
+  // DOM 元素定義
+  // ===============================
+  const canvasWrap = document.getElementById("canvasWrap");
+  const statusText = document.getElementById("statusText");
+  const measureText = document.getElementById("measureText");
 
-// 版本字串：用來避免瀏覽器快取舊檔（你改模型後很重要）
-// 想固定就改成 "v2"；想每次都強制刷新可改成 Date.now().toString()
-const ASSET_VER = "v2";
+  const btnMeasure = document.getElementById("btnMeasure");
+  const btnClear = document.getElementById("btnClear");
+  const btnHome = document.getElementById("btnHome");
+  const btnZoomIn = document.getElementById("btnZoomIn");
+  const btnZoomOut = document.getElementById("btnZoomOut");
 
-// ===== DOM =====
-const canvas = document.getElementById("c");
-const infoBar = document.getElementById("infoBar");
+  if (!canvasWrap) {
+    console.error('找不到 #canvasWrap。請確認 index.html 內有 <div id="canvasWrap">');
+    return;
+  }
 
-// ===== Scene / Camera / Renderer =====
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+  // ===============================
+  // Three.js 場景初始化
+  // ===============================
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x111111);
 
-const camera = new THREE.PerspectiveCamera(
-  45,
-  canvas.clientWidth / canvas.clientHeight,
-  0.1,
-  200000
-);
-camera.position.set(30, 30, 30);
+  const camera = new THREE.PerspectiveCamera(
+    55,
+    canvasWrap.clientWidth / canvasWrap.clientHeight,
+    0.1,
+    20000
+  );
+  camera.position.set(0, 150, 350);
 
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: true,
-  alpha: false,
-});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(canvasWrap.clientWidth, canvasWrap.clientHeight);
+  canvasWrap.appendChild(renderer.domElement);
 
-// three r160：建議明確指定
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // 光源
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(300, 500, 200);
+  scene.add(dir);
 
-// ===== Light =====
-const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
-scene.add(hemi);
+  // 控制器
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.target.set(0, 0, 0);
+  controls.update();
 
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-dir.position.set(50, 80, 30);
-scene.add(dir);
+  // 格線
+  const grid = new THREE.GridHelper(1200, 60, 0x444444, 0x222222);
+  grid.position.y = -0.5;
+  scene.add(grid);
 
-// ===== Grid（你原本有的視覺輔助）=====
-const grid = new THREE.GridHelper(200, 50, 0x444444, 0x222222);
-scene.add(grid);
+  // ===============================
+  // 模型載入（同資料夾：MipModel-v2.obj / .mtl / .jpg）
+  // ===============================
+  const MODEL_MTL = "MipModel-v2.mtl";
+  const MODEL_OBJ = "MipModel-v2.obj";
+  const basePath = "./"; // GitHub Pages / 本機都用相對路徑最穩
 
-// ===== Controls =====
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
+  if (statusText) statusText.textContent = "模型載入中...";
 
-// ===== Model holder =====
-let modelRoot = null;
+  const mtlLoader = new MTLLoader();
+  mtlLoader.setPath(basePath);
 
-// ===== Load model (MTL -> OBJ) =====
-function loadModel() {
-  // 如果之前已經有模型，先移除
-  if (modelRoot) {
-    scene.remove(modelRoot);
-    modelRoot.traverse((o) => {
-      if (o.isMesh) {
-        o.geometry?.dispose?.();
-        if (Array.isArray(o.material)) {
-          o.material.forEach(disposeMaterial);
-        } else {
-          disposeMaterial(o.material);
+  const objLoader = new OBJLoader();
+  objLoader.setPath(basePath);
+
+  let modelRoot = null;
+
+  mtlLoader.load(
+    MODEL_MTL,
+    (materials) => {
+      materials.preload();
+
+      // 貼圖色彩空間（更接近正常顏色）
+      for (const k in materials.materials) {
+        const m = materials.materials[k];
+        if (m.map) {
+          m.map.colorSpace = THREE.SRGBColorSpace;
+          m.map.needsUpdate = true;
         }
       }
-    });
-    modelRoot = null;
-  }
 
-  const manager = new THREE.LoadingManager();
+      objLoader.setMaterials(materials);
 
-  manager.onStart = () => {
-    if (infoBar) infoBar.textContent = "模型載入中...";
-  };
+      objLoader.load(
+        MODEL_OBJ,
+        (obj) => {
+          modelRoot = obj;
+          scene.add(obj);
 
-  manager.onLoad = () => {
-    if (infoBar) infoBar.textContent = "模型載入完成";
-  };
+          // 置中 + 調整相機
+          const box = new THREE.Box3().setFromObject(obj);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const center = new THREE.Vector3();
+          box.getCenter(center);
 
-  manager.onError = (url) => {
-    console.warn("載入失敗：", url);
-    if (infoBar) infoBar.textContent = `載入失敗：${url}`;
-  };
+          obj.position.sub(center);
+          controls.target.set(0, 0, 0);
+          controls.update();
 
-  const mtlLoader = new MTLLoader(manager);
-  mtlLoader.setPath("./"); // 關鍵：貼圖 jpg 會跟著這個路徑找
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const fitDist = maxDim * 1.4;
+          camera.position.set(fitDist * 0.35, fitDist * 0.35, fitDist);
+          camera.near = Math.max(0.1, maxDim / 1000);
+          camera.far = Math.max(20000, maxDim * 10);
+          camera.updateProjectionMatrix();
 
-  // 用 querystring 避免快取舊 mtl（你改過貼圖路徑/檔名時很常救命）
-  mtlLoader.load(`${MODEL_MTL}?v=${ASSET_VER}`, (materials) => {
-    materials.preload();
-
-    const objLoader = new OBJLoader(manager);
-    objLoader.setMaterials(materials);
-    objLoader.setPath("./");
-
-    objLoader.load(`${MODEL_OBJ}?v=${ASSET_VER}`, (obj) => {
-      modelRoot = obj;
-
-      // 重要：確保貼圖色彩空間正確、且雙面顯示避免背面黑掉
-      modelRoot.traverse((child) => {
-        if (!child.isMesh) return;
-
-        const mat = child.material;
-        if (Array.isArray(mat)) {
-          mat.forEach(fixMaterial);
-        } else {
-          fixMaterial(mat);
+          if (statusText) statusText.textContent = "模型載入完成";
+        },
+        undefined,
+        (err) => {
+          console.error("OBJ 載入失敗：", err);
+          if (statusText) statusText.textContent = "OBJ 載入失敗（請開 Console 看錯誤）";
         }
-      });
+      );
+    },
+    undefined,
+    (err) => {
+      console.error("MTL 載入失敗：", err);
+      if (statusText) statusText.textContent = "MTL 載入失敗（請開 Console 看錯誤）";
+    }
+  );
 
-      // 自動置中 + 調整相機距離（避免載入後跑很遠看不到）
-      const box = new THREE.Box3().setFromObject(modelRoot);
-      const size = new THREE.Vector3();
-      const center = new THREE.Vector3();
-      box.getSize(size);
-      box.getCenter(center);
+  // ===============================
+  // 量測（兩點距離）
+  // ===============================
+  let isMeasuring = false;
+  let pickedPoints = [];
+  let pickedLine = null;
+  let lastDistance = 0;
 
-      modelRoot.position.sub(center);
-      scene.add(modelRoot);
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
 
-      const maxDim = Math.max(size.x, size.y, size.z);
-      const dist = maxDim * 1.2 + 10;
-      camera.position.set(dist, dist * 0.6, dist);
-      camera.lookAt(0, 0, 0);
-      controls.target.set(0, 0, 0);
-      controls.update();
-    });
-  });
-}
-
-function fixMaterial(material) {
-  if (!material) return;
-
-  material.side = THREE.DoubleSide;
-
-  if (material.map) {
-    material.map.colorSpace = THREE.SRGBColorSpace;
-    material.map.needsUpdate = true;
+  function setMeasureText(v) {
+    if (measureText) measureText.textContent = v;
   }
-  material.needsUpdate = true;
-}
 
-function disposeMaterial(material) {
-  if (!material) return;
-  if (material.map) material.map.dispose?.();
-  material.dispose?.();
-}
+  function clearMeasure() {
+    pickedPoints = [];
+    lastDistance = 0;
+    setMeasureText("量測值：—");
 
-// ===== Resize =====
-function onResize() {
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  renderer.setSize(w, h, false);
-}
-window.addEventListener("resize", onResize);
+    if (pickedLine) {
+      scene.remove(pickedLine);
+      pickedLine.geometry.dispose();
+      pickedLine.material.dispose();
+      pickedLine = null;
+    }
+  }
 
-// ===== Animate =====
-function animate() {
-  requestAnimationFrame(animate);
-  controls.update();
-  renderer.render(scene, camera);
-}
+  function updateLine() {
+    if (pickedLine) {
+      scene.remove(pickedLine);
+      pickedLine.geometry.dispose();
+      pickedLine.material.dispose();
+      pickedLine = null;
+    }
+    if (pickedPoints.length < 2) return;
 
-// ===== Start =====
-loadModel();
-animate();
+    const geom = new THREE.BufferGeometry().setFromPoints(pickedPoints);
+    const mat = new THREE.LineBasicMaterial({ color: 0xffcc00 });
+    pickedLine = new THREE.Line(geom, mat);
+    scene.add(pickedLine);
+
+    const d = pickedPoints[0].distanceTo(pickedPoints[1]);
+    lastDistance = d;
+    setMeasureText(`量測值：${d.toFixed(2)} m`);
+  }
+
+  function onPointerDown(e) {
+    if (!isMeasuring) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    const targets = modelRoot ? [modelRoot] : scene.children;
+    const hits = raycaster.intersectObjects(targets, true);
+    if (!hits.length) return;
+
+    const p = hits[0].point.clone();
+    pickedPoints.push(p);
+
+    if (pickedPoints.length > 2) {
+      clearMeasure();
+      pickedPoints.push(p);
+    }
+
+    if (pickedPoints.length === 2) updateLine();
+  }
+
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
+
+  btnMeasure?.addEventListener("click", () => {
+    isMeasuring = !isMeasuring;
+    btnMeasure.classList.toggle("active", isMeasuring);
+  });
+
+  btnClear?.addEventListener("click", () => clearMeasure());
+
+  btnHome?.addEventListener("click", () => {
+    controls.target.set(0, 0, 0);
+    controls.update();
+  });
+
+  btnZoomIn?.addEventListener("click", () => camera.position.multiplyScalar(0.9));
+  btnZoomOut?.addEventListener("click", () => camera.position.multiplyScalar(1.1));
+
+  // Resize
+  function onResize() {
+    const w = canvasWrap.clientWidth;
+    const h = canvasWrap.clientHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener("resize", onResize);
+
+  // Render loop
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+});
