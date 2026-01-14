@@ -1,246 +1,180 @@
-// ===============================
-// Three.js (ES Module via Import Map)
-// ===============================
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
-// =====================================================
-// 入口：等 DOM 都準備好再開始（避免 GitHub Pages 上抓不到元素）
-// =====================================================
+// ===============================
+// DOM：等頁面元素都 ready 再初始化
+// ===============================
 window.addEventListener("DOMContentLoaded", () => {
-  // ===============================
-  // DOM 元素定義
-  // ===============================
   const canvasWrap = document.getElementById("canvasWrap");
-  const statusText = document.getElementById("statusText");
-  const measureText = document.getElementById("measureText");
-
-  const btnMeasure = document.getElementById("btnMeasure");
-  const btnClear = document.getElementById("btnClear");
-  const btnHome = document.getElementById("btnHome");
-  const btnZoomIn = document.getElementById("btnZoomIn");
-  const btnZoomOut = document.getElementById("btnZoomOut");
-
   if (!canvasWrap) {
-    console.error('找不到 #canvasWrap。請確認 index.html 內有 <div id="canvasWrap">');
+    console.error("找不到 #canvasWrap，請確認 index.html 有 <div id='canvasWrap'>");
     return;
   }
 
+  initThree(canvasWrap);
+});
+
+function initThree(canvasWrap) {
   // ===============================
-  // Three.js 場景初始化
+  // 場景 / 相機 / 渲染器
   // ===============================
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x111111);
 
   const camera = new THREE.PerspectiveCamera(
-    55,
+    45,
     canvasWrap.clientWidth / canvasWrap.clientHeight,
     0.1,
-    20000
+    5000
   );
-  camera.position.set(0, 150, 350);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(canvasWrap.clientWidth, canvasWrap.clientHeight);
   canvasWrap.appendChild(renderer.domElement);
 
-  // 光源
-  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-  dir.position.set(300, 500, 200);
-  scene.add(dir);
+  // --- 色彩/曝光設定（讓貼圖顏色更正確、畫面更亮一些） ---
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.25;
+  renderer.physicallyCorrectLights = true;
 
+  // ===============================
   // 控制器
+  // ===============================
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.target.set(0, 0, 0);
-  controls.update();
 
-  // 格線
-  const grid = new THREE.GridHelper(1200, 60, 0x444444, 0x222222);
-  grid.position.y = -0.5;
+  // ===============================
+  // 燈光（加亮）
+  // ===============================
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.6);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.6);
+  dirLight.position.set(200, 300, 200);
+  scene.add(dirLight);
+
+  // 柔和的天光/地光，讓陰影區不會太黑
+  const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.9);
+  hemiLight.position.set(0, 200, 0);
+  scene.add(hemiLight);
+
+  // 地面格線（可留著方便看尺度）
+  const grid = new THREE.GridHelper(500, 50, 0x444444, 0x222222);
   scene.add(grid);
 
   // ===============================
-  // 模型載入（同資料夾：MipModel-v2.obj / .mtl / .jpg）
+  // 讀取 OBJ + MTL
   // ===============================
   const MODEL_MTL = "MipModel-v2.mtl";
   const MODEL_OBJ = "MipModel-v2.obj";
-  const basePath = "./"; // GitHub Pages / 本機都用相對路徑最穩
-
-  if (statusText) statusText.textContent = "模型載入中...";
 
   const mtlLoader = new MTLLoader();
-  mtlLoader.setPath(basePath);
-
-  const objLoader = new OBJLoader();
-  objLoader.setPath(basePath);
-
-  let modelRoot = null;
-
   mtlLoader.load(
     MODEL_MTL,
     (materials) => {
       materials.preload();
 
-      // 貼圖色彩空間（更接近正常顏色）
-      for (const k in materials.materials) {
-        const m = materials.materials[k];
-        if (m.map) {
-          m.map.colorSpace = THREE.SRGBColorSpace;
-          m.map.needsUpdate = true;
-        }
-      }
-
+      const objLoader = new OBJLoader();
       objLoader.setMaterials(materials);
 
       objLoader.load(
         MODEL_OBJ,
         (obj) => {
-          modelRoot = obj;
-          scene.add(obj);
+          // 模型座標系：不同來源的 OBJ 可能會有軸向差異。
+          // 如果你看到模型「站起來/躺倒 90 度」，調整下面這個角度即可：
+          // 0 代表不旋轉；-Math.PI/2 或 Math.PI/2 代表繞 X 軸旋轉 90 度。
+          const ROTATE_X = 0;
+          obj.rotation.x = ROTATE_X;
 
-          // 置中 + 調整相機
+          // 計算 bounding box：置中 + 放到地面上
           const box = new THREE.Box3().setFromObject(obj);
           const size = new THREE.Vector3();
-          box.getSize(size);
           const center = new THREE.Vector3();
+          box.getSize(size);
           box.getCenter(center);
 
-          obj.position.sub(center);
-          controls.target.set(0, 0, 0);
-          controls.update();
+          // 置中到原點
+          obj.position.x += -center.x;
+          obj.position.y += -center.y;
+          obj.position.z += -center.z;
 
+          // 放到地面（讓最低點貼齊 y=0）
+          const box2 = new THREE.Box3().setFromObject(obj);
+          obj.position.y = -box2.min.y;
+
+          // 讓貼圖以 sRGB 顯示（不然會偏灰/偏暗）
+          obj.traverse((child) => {
+            if (!child.isMesh) return;
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            for (const m of mats) {
+              if (m && m.map) {
+                m.map.colorSpace = THREE.SRGBColorSpace;
+                m.needsUpdate = true;
+              }
+            }
+          });
+
+          scene.add(obj);
+
+          // 相機自動抓距離（依模型尺寸）
           const maxDim = Math.max(size.x, size.y, size.z);
-          const fitDist = maxDim * 1.4;
-          camera.position.set(fitDist * 0.35, fitDist * 0.35, fitDist);
-          camera.near = Math.max(0.1, maxDim / 1000);
-          camera.far = Math.max(20000, maxDim * 10);
+          const dist = maxDim * 1.6;
+
+          controls.target.set(0, maxDim * 0.35, 0);
+          camera.position.set(0, maxDim * 0.8, dist);
+          camera.near = Math.max(0.1, maxDim / 5000);
+          camera.far = Math.max(5000, maxDim * 20);
           camera.updateProjectionMatrix();
 
-          if (statusText) statusText.textContent = "模型載入完成";
+          controls.update();
+
+          const statusEl = document.getElementById("statusText");
+          if (statusEl) statusEl.textContent = "模型載入完成";
         },
-        undefined,
+        (xhr) => {
+          // loading progress
+          // console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
+        },
         (err) => {
           console.error("OBJ 載入失敗：", err);
-          if (statusText) statusText.textContent = "OBJ 載入失敗（請開 Console 看錯誤）";
+          const statusEl = document.getElementById("statusText");
+          if (statusEl) statusEl.textContent = "OBJ 載入失敗（請看 Console）";
         }
       );
     },
     undefined,
     (err) => {
       console.error("MTL 載入失敗：", err);
-      if (statusText) statusText.textContent = "MTL 載入失敗（請開 Console 看錯誤）";
+      const statusEl = document.getElementById("statusText");
+      if (statusEl) statusEl.textContent = "MTL 載入失敗（請看 Console）";
     }
   );
 
   // ===============================
-  // 量測（兩點距離）
-  // ===============================
-  let isMeasuring = false;
-  let pickedPoints = [];
-  let pickedLine = null;
-  let lastDistance = 0;
-
-  const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2();
-
-  function setMeasureText(v) {
-    if (measureText) measureText.textContent = v;
-  }
-
-  function clearMeasure() {
-    pickedPoints = [];
-    lastDistance = 0;
-    setMeasureText("量測值：—");
-
-    if (pickedLine) {
-      scene.remove(pickedLine);
-      pickedLine.geometry.dispose();
-      pickedLine.material.dispose();
-      pickedLine = null;
-    }
-  }
-
-  function updateLine() {
-    if (pickedLine) {
-      scene.remove(pickedLine);
-      pickedLine.geometry.dispose();
-      pickedLine.material.dispose();
-      pickedLine = null;
-    }
-    if (pickedPoints.length < 2) return;
-
-    const geom = new THREE.BufferGeometry().setFromPoints(pickedPoints);
-    const mat = new THREE.LineBasicMaterial({ color: 0xffcc00 });
-    pickedLine = new THREE.Line(geom, mat);
-    scene.add(pickedLine);
-
-    const d = pickedPoints[0].distanceTo(pickedPoints[1]);
-    lastDistance = d;
-    setMeasureText(`量測值：${d.toFixed(2)} m`);
-  }
-
-  function onPointerDown(e) {
-    if (!isMeasuring) return;
-
-    const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-    raycaster.setFromCamera(mouse, camera);
-
-    const targets = modelRoot ? [modelRoot] : scene.children;
-    const hits = raycaster.intersectObjects(targets, true);
-    if (!hits.length) return;
-
-    const p = hits[0].point.clone();
-    pickedPoints.push(p);
-
-    if (pickedPoints.length > 2) {
-      clearMeasure();
-      pickedPoints.push(p);
-    }
-
-    if (pickedPoints.length === 2) updateLine();
-  }
-
-  renderer.domElement.addEventListener("pointerdown", onPointerDown);
-
-  btnMeasure?.addEventListener("click", () => {
-    isMeasuring = !isMeasuring;
-    btnMeasure.classList.toggle("active", isMeasuring);
-  });
-
-  btnClear?.addEventListener("click", () => clearMeasure());
-
-  btnHome?.addEventListener("click", () => {
-    controls.target.set(0, 0, 0);
-    controls.update();
-  });
-
-  btnZoomIn?.addEventListener("click", () => camera.position.multiplyScalar(0.9));
-  btnZoomOut?.addEventListener("click", () => camera.position.multiplyScalar(1.1));
-
   // Resize
-  function onResize() {
+  // ===============================
+  window.addEventListener("resize", () => {
     const w = canvasWrap.clientWidth;
     const h = canvasWrap.clientHeight;
-    renderer.setSize(w, h);
+    if (!w || !h) return;
+
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
-  }
-  window.addEventListener("resize", onResize);
+    renderer.setSize(w, h);
+  });
 
-  // Render loop
+  // ===============================
+  // 動畫
+  // ===============================
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
   }
   animate();
-});
+}
