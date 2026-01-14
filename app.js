@@ -7,15 +7,15 @@ import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 // 全域變數設定
 // ===============================
 let scene, camera, renderer, controls;
-let loadedModel = null; // 儲存載入後的模型物件
+let loadedModel = null;
 let raycaster, mouse;
 
-// 量測相關變數
+// 量測相關
 let isMeasuring = false;
-let measurePoints = []; // 暫存點擊的座標 [p1, p2]
-let measureObjects = []; // 儲存畫出來的線和球，方便清除
+let measurePoints = [];
+let measureObjects = [];
 
-// 儲存初始視角 (用於"回到對焦點")
+// 初始視角 (用於"回到對焦點")
 const initialCameraState = {
   position: new THREE.Vector3(),
   target: new THREE.Vector3(),
@@ -32,7 +32,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   initThree(canvasWrap);
-  setupUI(); // 綁定按鈕事件
+  setupUI();
 });
 
 function initThree(canvasWrap) {
@@ -53,7 +53,6 @@ function initThree(canvasWrap) {
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(canvasWrap.clientWidth, canvasWrap.clientHeight);
   
-  // 色彩與曝光設定 (讓模型看起來更真實亮麗)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.2;
@@ -65,7 +64,7 @@ function initThree(canvasWrap) {
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  // 5. 燈光系統
+  // 5. 燈光
   const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
   scene.add(ambientLight);
 
@@ -77,21 +76,19 @@ function initThree(canvasWrap) {
   hemiLight.position.set(0, 200, 0);
   scene.add(hemiLight);
 
-  // 6. 地面網格
+  // 6. 格線
   const grid = new THREE.GridHelper(500, 50, 0x444444, 0x222222);
   scene.add(grid);
 
-  // 7. 量測工具初始化
+  // 7. 量測工具
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2();
-
-  // 監聽畫布點擊 (用於量測)
   renderer.domElement.addEventListener("pointerdown", onCanvasClick);
 
-  // 8. 開始載入模型
+  // 8. 載入模型
   loadModel();
 
-  // Resize 事件
+  // Resize
   window.addEventListener("resize", () => {
     const w = canvasWrap.clientWidth;
     const h = canvasWrap.clientHeight;
@@ -100,7 +97,7 @@ function initThree(canvasWrap) {
     renderer.setSize(w, h);
   });
 
-  // 動畫迴圈
+  // Animation Loop
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -110,7 +107,7 @@ function initThree(canvasWrap) {
 }
 
 // ===============================
-// 模型載入邏輯
+// 模型載入與位置計算
 // ===============================
 function loadModel() {
   const MODEL_MTL = "MipModel-v2.mtl";
@@ -125,40 +122,34 @@ function loadModel() {
     objLoader.setMaterials(materials);
 
     objLoader.load(MODEL_OBJ, (obj) => {
-      // 1. 旋轉：修正模型座標系 (從 Z-up 轉為 Y-up)
+      // 1. 旋轉
       obj.rotation.set(-Math.PI / 2, 0, 0);
 
-      // 2. 計算包圍盒 (Bounding Box)
+      // 2. 取得尺寸與中心
       const box = new THREE.Box3().setFromObject(obj);
       const size = new THREE.Vector3();
       const center = new THREE.Vector3();
       box.getSize(size);
       box.getCenter(center);
 
-      // 3. 置中：將模型中心移到 (0, ?, 0)
+      // 3. 置中 (XZ)
       obj.position.x += -center.x;
       obj.position.z += -center.z;
-      // 注意：Y 軸先不減 center，後面單獨處理
 
-      // 4. 貼地：計算旋轉後的最低點
-      // 必須重新計算 Box，因為上面改了 position
+      // 4. 貼地 (Y)
       obj.updateMatrixWorld(); 
       const box2 = new THREE.Box3().setFromObject(obj);
-      const shiftY = -box2.min.y;
-      obj.position.y += shiftY;
+      obj.position.y += -box2.min.y;
 
-      // 5. 【關鍵修正】抬高模型：讓模型懸浮在格線上方
-      // 使用模型最大邊長的 5% 作為抬升高度，確保視覺上明顯
+      // 5. 稍微抬高 (避免與格線重疊)
       const maxDim = Math.max(size.x, size.y, size.z);
       const LIFT_OFFSET = maxDim * 0.05; 
       obj.position.y += LIFT_OFFSET;
 
-      // 6. 材質修正 (確保顏色正確)
+      // 6. 材質色彩修正
       obj.traverse((child) => {
         if (child.isMesh) {
-          // 計算幾何邊界，優化 Raycaster 效能
           child.geometry.computeBoundingBox();
-          
           const mats = Array.isArray(child.material) ? child.material : [child.material];
           mats.forEach(m => {
             if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
@@ -167,16 +158,19 @@ function loadModel() {
       });
 
       scene.add(obj);
-      loadedModel = obj; // 儲存參照
+      loadedModel = obj;
 
-      // 7. 設定最佳相機視角
-      const dist = maxDim * 1.5;
-      const targetY = maxDim * 0.2; // 看向模型稍微偏下的位置
+      // ==========================================
+      // 【修改】相機初始距離
+      // 原本是 maxDim * 1.5，改成 0.5 讓它更近
+      // ==========================================
+      const dist = maxDim * 0.5; 
+      const targetY = maxDim * 0.2; 
 
-      camera.position.set(dist * 0.5, dist * 0.8, dist); // 斜上方視角
+      // 設定相機位置 (從斜上方看)
+      camera.position.set(dist * 0.8, dist * 0.8, dist);
       controls.target.set(0, targetY, 0);
       
-      // 儲存這個狀態給「回到對焦點」使用
       initialCameraState.position.copy(camera.position);
       initialCameraState.target.copy(controls.target);
 
@@ -187,11 +181,9 @@ function loadModel() {
 
       if (statusEl) statusEl.textContent = "模型載入完成";
     }, 
-    // progress
     (xhr) => {
         if(statusEl) statusEl.textContent = `載入中 ${(xhr.loaded / xhr.total * 100).toFixed(0)}%`;
     },
-    // error
     (err) => {
       console.error(err);
       if (statusEl) statusEl.textContent = "載入失敗";
@@ -200,41 +192,39 @@ function loadModel() {
 }
 
 // ===============================
-// UI 事件綁定
+// UI 與 按鈕事件
 // ===============================
 function setupUI() {
-  // 1. 線段量測按鈕
+  // 量測按鈕
   const btnMeasure = document.getElementById("btnMeasure");
   btnMeasure.addEventListener("click", () => {
     isMeasuring = !isMeasuring;
     if (isMeasuring) {
       btnMeasure.textContent = "量測中 (按ESC取消)";
-      btnMeasure.style.backgroundColor = "#d32f2f"; // 變紅
-      document.body.style.cursor = "crosshair"; // 滑鼠變十字
-      measurePoints = []; // 重置點
+      btnMeasure.style.backgroundColor = "#d32f2f";
+      document.body.style.cursor = "crosshair";
+      measurePoints = [];
     } else {
       resetMeasureState();
     }
   });
 
-  // 按 ESC 退出量測
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isMeasuring) {
       resetMeasureState();
     }
   });
 
-  // 2. 清除量測按鈕
+  // 清除量測
   const btnClear = document.getElementById("btnClear");
   btnClear.addEventListener("click", () => {
-    // 清除場景中的線和球
     measureObjects.forEach(obj => scene.remove(obj));
     measureObjects = [];
     measurePoints = [];
     document.getElementById("measureText").textContent = "量測值：—";
   });
 
-  // 3. 回到對焦點
+  // 回到對焦點
   const btnHome = document.getElementById("btnHome");
   btnHome.addEventListener("click", () => {
     if (!loadedModel) return;
@@ -243,62 +233,51 @@ function setupUI() {
     controls.update();
   });
 
-  // 4. 放大 (+)
-  const btnZoomIn = document.getElementById("btnZoomIn");
-  btnZoomIn.addEventListener("click", () => {
-    dollyCamera(0.8); // 縮小距離 = 放大
-  });
+  // 縮放按鈕
+  document.getElementById("btnZoomIn").addEventListener("click", () => dollyCamera(0.8));
+  document.getElementById("btnZoomOut").addEventListener("click", () => dollyCamera(1.2));
 
-  // 5. 縮小 (-)
-  const btnZoomOut = document.getElementById("btnZoomOut");
-  btnZoomOut.addEventListener("click", () => {
-    dollyCamera(1.2); // 增加距離 = 縮小
-  });
-  
-  // 匯出按鈕 (此處僅保留監聽，未實作具體轉檔邏輯)
+  // -----------------------------
+  // 【新增】匯出功能
+  // -----------------------------
   const btnExportCsv = document.getElementById("btnExportCsv");
-  if(btnExportCsv) btnExportCsv.addEventListener("click", () => alert("匯出 CSV 功能尚未實作"));
+  if(btnExportCsv) {
+    btnExportCsv.addEventListener("click", exportToCSV);
+  }
   
   const btnExportWord = document.getElementById("btnExportWord");
-  if(btnExportWord) btnExportWord.addEventListener("click", () => alert("匯出 Word 功能尚未實作"));
+  if(btnExportWord) {
+    btnExportWord.addEventListener("click", exportToWord);
+  }
 }
 
 function resetMeasureState() {
   isMeasuring = false;
   const btnMeasure = document.getElementById("btnMeasure");
   btnMeasure.textContent = "線段量測";
-  btnMeasure.style.backgroundColor = ""; // 恢復原色
+  btnMeasure.style.backgroundColor = "";
   document.body.style.cursor = "default";
   measurePoints = [];
 }
 
 function dollyCamera(factor) {
-  // 沿著相機視線方向移動
   const direction = new THREE.Vector3().subVectors(camera.position, controls.target);
   direction.multiplyScalar(factor);
   camera.position.copy(controls.target).add(direction);
   controls.update();
 }
 
-// ===============================
-// 量測核心邏輯 (Raycasting)
-// ===============================
 function onCanvasClick(event) {
   if (!isMeasuring || !loadedModel) return;
 
-  // 1. 取得滑鼠在 Canvas 的正規化座標 (-1 ~ 1)
   const rect = renderer.domElement.getBoundingClientRect();
   mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
   mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-  // 2. 發射射線
   raycaster.setFromCamera(mouse, camera);
-  
-  // 3. 檢查碰撞 (只檢查模型，不檢查網格)
   const intersects = raycaster.intersectObject(loadedModel, true);
 
   if (intersects.length > 0) {
-    // 取得第一個碰撞點
     const point = intersects[0].point;
     addMeasurePoint(point);
   }
@@ -307,21 +286,20 @@ function onCanvasClick(event) {
 function addMeasurePoint(point) {
   measurePoints.push(point);
 
-  // 1. 畫一個小球標記點擊處
-  const sphereGeom = new THREE.SphereGeometry(0.3, 16, 16); // 大小可視模型比例調整
+  // 標記點
+  const sphereGeom = new THREE.SphereGeometry(0.3, 16, 16);
   const sphereMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false }); 
   const sphere = new THREE.Mesh(sphereGeom, sphereMat);
-  sphere.renderOrder = 999; // 確保畫在最上層
+  sphere.renderOrder = 999;
   sphere.position.copy(point);
   scene.add(sphere);
   measureObjects.push(sphere);
 
-  // 2. 如果有點滿兩點，畫線並計算距離
+  // 兩點畫線
   if (measurePoints.length === 2) {
     const p1 = measurePoints[0];
     const p2 = measurePoints[1];
 
-    // 畫線
     const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
     const material = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3, depthTest: false });
     const line = new THREE.Line(geometry, material);
@@ -329,13 +307,100 @@ function addMeasurePoint(point) {
     scene.add(line);
     measureObjects.push(line);
 
-    // 計算距離
     const dist = p1.distanceTo(p2);
-    
-    // 更新 UI 文字
     document.getElementById("measureText").textContent = `量測值：${dist.toFixed(3)} m`;
-
-    // 清空點陣列，準備下一次測量
     measurePoints = [];
   }
+}
+
+// ===============================
+// 匯出功能實作
+// ===============================
+
+// 1. 取得使用者輸入的資料
+function getFormData() {
+  return {
+    bridgeName: document.getElementById("bridgeName").value || "未命名",
+    roadId: document.getElementById("roadId").value || "無",
+    structureType: document.getElementById("structureType").value,
+    sedimentation: document.getElementById("sedimentation").value,
+    clearance: document.getElementById("clearance").value,
+    width: document.getElementById("width").value,
+    length: document.getElementById("lengthRoadWidth").value,
+    measureVal: document.getElementById("measureText").textContent.replace("量測值：", "")
+  };
+}
+
+// 2. 匯出 CSV
+function exportToCSV() {
+  const data = getFormData();
+  
+  // 定義 CSV 內容 (含 BOM \uFEFF 讓 Excel 支援中文)
+  let csvContent = "\uFEFF";
+  csvContent += "項目,內容\n";
+  csvContent += `橋名,${data.bridgeName}\n`;
+  csvContent += `道路編號,${data.roadId}\n`;
+  csvContent += `類型,${data.structureType}\n`;
+  csvContent += `淤積程度,${data.sedimentation}\n`;
+  csvContent += `淨高 (m),${data.clearance}\n`;
+  csvContent += `寬度 (m),${data.width}\n`;
+  csvContent += `長度 (m),${data.length}\n`;
+  csvContent += `最近一次量測結果,${data.measureVal}\n`;
+
+  // 建立 Blob 並下載
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${data.bridgeName}_資料表.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// 3. 匯出 Word (.doc)
+// 這裡使用 HTML 格式偽裝成 doc，Word 可以完美開啟
+function exportToWord() {
+  const data = getFormData();
+
+  const htmlContent = `
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+       <meta charset="utf-8">
+       <title>檢測報告</title>
+       <style>
+         body { font-family: '微軟正黑體', sans-serif; }
+         table { border-collapse: collapse; width: 100%; }
+         td, th { border: 1px solid #000; padding: 8px; text-align: left; }
+         th { background-color: #f2f2f2; }
+         h1 { text-align: center; }
+       </style>
+    </head>
+    <body>
+       <h1>橋梁構造物檢測報告</h1>
+       <table>
+         <tr><th width="30%">項目</th><th>內容</th></tr>
+         <tr><td>橋名</td><td>${data.bridgeName}</td></tr>
+         <tr><td>道路編號</td><td>${data.roadId}</td></tr>
+         <tr><td>類型</td><td>${data.structureType}</td></tr>
+         <tr><td>淤積程度</td><td>${data.sedimentation}</td></tr>
+         <tr><td>淨高 (m)</td><td>${data.clearance}</td></tr>
+         <tr><td>寬度 (m)</td><td>${data.width}</td></tr>
+         <tr><td>長度 (m)</td><td>${data.length}</td></tr>
+         <tr><td>畫面量測紀錄</td><td>${data.measureVal}</td></tr>
+       </table>
+       <br>
+       <p>匯出時間：${new Date().toLocaleString()}</p>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([htmlContent], { type: "application/msword" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${data.bridgeName}_報告.doc`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
