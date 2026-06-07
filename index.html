@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UAV 3D 地形與構造物調查</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: row;
+            font-family: "Microsoft JhengHei", sans-serif;
+            overflow: hidden;
+        }
+
+        /* 左側 Cesium 容器 */
+        #cesiumContainer {
+            width: 50%;
+            height: 100%;
+            background-color: #000;
+            flex-shrink: 0;
+        }
+
+        /* 右側表單容器 */
+        #formContainer {
+            width: 50%;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+            background-color: #fcfcfc;
+            flex-shrink: 0;
+        }
+
+        .form-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        #exportBtn {
+            background-color: #0078D7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        #exportBtn:hover {
+            background-color: #005A9E;
+        }
+
+        /* 構造物調查表格樣式 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+
+        table, th, td {
+            border: 2px solid black;
+        }
+
+        td {
+            padding: 12px;
+            vertical-align: top;
+            line-height: 1.8;
+        }
+
+        .category-title {
+            width: 20%;
+            text-align: center;
+            font-weight: bold;
+            vertical-align: middle;
+        }
+
+        .category-content div {
+            margin-bottom: 8px;
+        }
+
+        label {
+            margin-right: 15px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+            transform: scale(1.2);
+        }
+
+        .short-input {
+            width: 50px;
+            border: none;
+            border-bottom: 1px solid #000;
+            text-align: center;
+            outline: none;
+        }
+
+        .long-input {
+            width: 150px;
+            border: none;
+            border-bottom: 1px solid #000;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+
+    <div id="formContainer">
+        <div class="form-header">
+            <h2>構造物調查表</h2>
+            <button id="exportBtn" onclick="exportToWord()">匯出成 Word 下載</button>
+        </div>
+        
+        <table id="surveyTable">
+            <tbody>
+                <tr>
+                    <td class="category-title">構造物周遭環境</td>
+                    <td class="category-content">
+                        <div>
+                            <strong>溪床：</strong>
+                            <label><input type="checkbox"> 無臨溪岸</label>
+                            <label><input type="checkbox"> 常流水</label>
+                            <label><input type="checkbox"> 溪床掏刷</label>
+                            <label><input type="checkbox"> 溪床淤積</label>
+                            <label><input type="checkbox"> 其它</label>
+                        </div>
+                        <div>
+                            <strong>坡面：</strong>
+                            <label><input type="checkbox"> 穩定</label>
+                            <label><input type="checkbox"> 河岸掏刷崩塌</label>
+                            <label><input type="checkbox"> 山腹崩塌</label>
+                            <label><input type="checkbox"> 其它</label>
+                        </div>
+                        <div>
+                            <strong>庫容情形(僅評估防砂壩)：</strong>
+                            <label><input type="checkbox"> 後方土砂高程距溢流口高度約 <input type="text" class="short-input"> 公尺</label>
+                            <label><input type="checkbox"> 淤滿</label>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="category-title">溢洪口</td>
+                    <td class="category-content">
+                        <label><input type="checkbox"> 良好</label>
+                        <label><input type="checkbox"> 裂縫</label>
+                        <label><input type="checkbox"> 磨蝕</label>
+                        <label><input type="checkbox"> 掏空</label>
+                        <label><input type="checkbox"> 沉陷</label>
+                        <label><input type="checkbox"> 錯動變形</label>
+                        <label><input type="checkbox"> 位移</label><br>
+                        <label><input type="checkbox"> 腐朽</label>
+                        <label><input type="checkbox"> 火害</label>
+                        <label><input type="checkbox"> 外框斷裂</label>
+                        <label><input type="checkbox"> 沖毀流失</label><br>
+                        <label><input type="checkbox"> 植生覆蓋</label>
+                        <label><input type="checkbox"> 構造物淤埋</label>
+                        <label><input type="checkbox"> 其他(<input type="text" class="long-input">)</label>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="category-title">壩體(上下游坡面)</td>
+                    <td class="category-content">
+                        <label><input type="checkbox"> 良好</label>
+                        <label><input type="checkbox"> 裂縫</label>
+                        <label><input type="checkbox"> 磨蝕</label>
+                        <label><input type="checkbox"> 掏空</label>
+                        <label><input type="checkbox"> 傾倒</label>
+                        <label><input type="checkbox"> 沉陷</label>
+                        <label><input type="checkbox"> 錯動變形</label>
+                        <label><input type="checkbox"> 位移</label><br>
+                        <label><input type="checkbox"> 填土(石)流失</label>
+                        <label><input type="checkbox"> 腐朽</label>
+                        <label><input type="checkbox"> 火害</label>
+                        <label><input type="checkbox"> 外框斷裂</label>
+                        <label><input type="checkbox"> 沖毀流失</label><br>
+                        <label><input type="checkbox"> 植生覆蓋</label>
+                        <label><input type="checkbox"> 構造物淤埋</label>
+                        <label><input type="checkbox"> 其他(<input type="text" class="long-input">)</label>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="category-title">鋼構件</td>
+                    <td class="category-content">
+                        <label><input type="checkbox"> 無</label>
+                        <label><input type="checkbox"> 良好</label><br>
+                        <label><input type="checkbox"> 鋼管凹陷與變形</label>
+                        <label><input type="checkbox"> 主體歪斜或扭曲</label>
+                        <label><input type="checkbox"> 局部剪斷或破裂</label><br>
+                        <label><input type="checkbox"> 防蝕塗層剝落</label>
+                        <label><input type="checkbox"> 鋼材厚度減薄(磨耗)</label>
+                        <label><input type="checkbox"> 氧化生鏽</label><br>
+                        <label><input type="checkbox"> 基座錨錠螺栓鬆脫或剪斷</label>
+                        <label><input type="checkbox"> 銲道疲勞與開裂</label>
+                        <label><input type="checkbox"> 接觸面夾縫腐蝕</label>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="category-title">木構造</td>
+                    <td class="category-content">
+                        <label><input type="checkbox"> 無</label>
+                        <label><input type="checkbox"> 良好</label><br>
+                        <label><input type="checkbox"> 木質材料(變形、腐朽、損傷、磨耗、開裂、空洞)</label><br>
+                        <label><input type="checkbox"> 接合材料(鏽蝕、變形、鬆脫)</label>
+                        <label><input type="checkbox"> 填料土砂(流出、沉陷)</label>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="category-title">壩翼</td>
+                    <td class="category-content">
+                        <label><input type="checkbox"> 無</label>
+                        <label><input type="checkbox"> 良好</label><br>
+                        <label><input type="checkbox"> 裂縫</label>
+                        <label><input type="checkbox"> 磨蝕</label>
+                        <label><input type="checkbox"> 掏空</label>
+                        <label><input type="checkbox"> 傾倒</label>
+                        <label><input type="checkbox"> 沉陷</label>
+                        <label><input type="checkbox"> 錯動變形</label>
+                        <label><input type="checkbox"> 位移</label><br>
+                        <label><input type="checkbox"> 填土(石)流失</label>
+                        <label><input type="checkbox"> 腐朽</label>
+                        <label><input type="checkbox"> 火害</label>
+                        <label><input type="checkbox"> 外框斷裂</label>
+                        <label><input type="checkbox"> 沖毀流失</label><br>
+                        <label><input type="checkbox"> 植生覆蓋</label>
+                        <label><input type="checkbox"> 構造物淤埋</label>
+                        <label><input type="checkbox"> 其他(<input type="text" class="long-input">)</label>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
